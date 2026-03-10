@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Tech Debt Analyzer</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --surface2: #1a1a24;
+    --border: #2a2a3a;
+    --accent: #e8ff47;
+    --accent2: #ff6b35;
+    --accent3: #7c6af7;
+    --text: #e8e8f0;
+    --muted: #6b6b80;
+    --red: #ff4757;
+    --yellow: #ffd32a;
+    --green: #2ed573;
+    --radius: 8px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* GRID BG */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(232,255,71,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(232,255,71,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
+
+  /* HEADER */
+  header {
+    padding: 36px 0 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 40px;
+  }
+  .header-inner { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .brand {
+    display: flex; align-items: center; gap: 14px;
+  }
+  .brand-icon {
+    width: 44px; height: 44px;
+    background: var(--accent);
+    border-radius: 6px;
+    display: grid; place-items: center;
+    font-size: 22px;
+  }
+  .brand h1 { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.5px; }
+  .brand p { font-size: 0.8rem; color: var(--muted); font-family: 'Space Mono', monospace; margin-top: 2px; }
+
+  .score-badge {
+    text-align: right;
+  }
+  .score-badge .label { font-size: 0.7rem; font-family: 'Space Mono', monospace; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+  .score-badge .value { font-size: 3rem; font-weight: 800; line-height: 1; }
+  .score-badge .value.critical { color: var(--red); }
+  .score-badge .value.high { color: var(--accent2); }
+  .score-badge .value.medium { color: var(--yellow); }
+  .score-badge .value.low { color: var(--green); }
+  .score-badge .sub { font-size: 0.75rem; color: var(--muted); font-family: 'Space Mono', monospace; }
+
+  /* NAV TABS */
+  .tabs { display: flex; gap: 4px; margin-bottom: 32px; background: var(--surface); padding: 4px; border-radius: var(--radius); width: fit-content; }
+  .tab {
+    padding: 8px 20px; border-radius: 6px; border: none; background: transparent;
+    color: var(--muted); font-family: 'Syne', sans-serif; font-size: 0.85rem; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .tab.active { background: var(--accent); color: #0a0a0f; }
+  .tab:hover:not(.active) { color: var(--text); }
+
+  /* PANELS */
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* CATEGORY CARDS */
+  .category-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+  .cat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .cat-card:hover { border-color: var(--accent3); }
+  .cat-header {
+    padding: 16px 20px;
+    display: flex; align-items: center; gap: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .cat-icon { font-size: 1.4rem; }
+  .cat-title { font-size: 0.95rem; font-weight: 700; }
+  .cat-score-pill {
+    margin-left: auto;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+  }
+  .pill-red { background: rgba(255,71,87,0.15); color: var(--red); }
+  .pill-orange { background: rgba(255,107,53,0.15); color: var(--accent2); }
+  .pill-yellow { background: rgba(255,211,42,0.15); color: var(--yellow); }
+  .pill-green { background: rgba(46,213,115,0.15); color: var(--green); }
+
+  /* CHECKLIST ITEMS */
+  .check-list { padding: 12px 20px; display: flex; flex-direction: column; gap: 8px; }
+  .check-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 8px 10px; border-radius: 6px;
+    cursor: pointer; transition: background 0.15s;
+    border: 1px solid transparent;
+  }
+  .check-item:hover { background: var(--surface2); }
+  .check-item.checked { opacity: 0.55; }
+  .check-item.checked .item-label { text-decoration: line-through; }
+
+  .checkbox {
+    width: 18px; height: 18px; min-width: 18px;
+    border: 1.5px solid var(--border);
+    border-radius: 4px; margin-top: 1px;
+    display: grid; place-items: center;
+    transition: all 0.15s;
+  }
+  .check-item.checked .checkbox { background: var(--green); border-color: var(--green); }
+  .checkbox::after { content: '✓'; font-size: 11px; color: #0a0a0f; opacity: 0; }
+  .check-item.checked .checkbox::after { opacity: 1; }
+
+  .item-content { flex: 1; }
+  .item-label { font-size: 0.85rem; line-height: 1.4; }
+  .item-impact {
+    font-size: 0.7rem; font-family: 'Space Mono', monospace;
+    margin-top: 3px;
+  }
+  .impact-high { color: var(--red); }
+  .impact-med { color: var(--yellow); }
+  .impact-low { color: var(--green); }
+
+  /* DASHBOARD */
+  .dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  @media(max-width: 640px) { .dashboard-grid { grid-template-columns: 1fr; } }
+
+  .metric-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+  }
+  .metric-card .m-label { font-size: 0.7rem; font-family: 'Space Mono', monospace; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .metric-card .m-value { font-size: 2rem; font-weight: 800; }
+  .metric-card .m-bar { height: 6px; background: var(--border); border-radius: 3px; margin-top: 10px; overflow: hidden; }
+  .metric-card .m-fill { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
+
+  .progress-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .progress-section h3 { font-size: 0.95rem; font-weight: 700; margin-bottom: 16px; }
+  .prog-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .prog-label { font-size: 0.78rem; width: 140px; min-width: 140px; color: var(--muted); }
+  .prog-bar { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+  .prog-fill { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
+  .prog-val { font-size: 0.75rem; font-family: 'Space Mono', monospace; width: 36px; text-align: right; }
+
+  /* ROADMAP */
+  .roadmap-lanes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media(max-width: 700px) { .roadmap-lanes { grid-template-columns: 1fr; } }
+
+  .lane {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .lane-header {
+    padding: 12px 16px;
+    font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+    border-bottom: 1px solid var(--border);
+  }
+  .lane-header.urgent { background: rgba(255,71,87,0.1); color: var(--red); }
+  .lane-header.short { background: rgba(255,107,53,0.1); color: var(--accent2); }
+  .lane-header.long { background: rgba(124,106,247,0.1); color: var(--accent3); }
+
+  .lane-body { padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .task-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+  }
+  .task-card .t-title { font-size: 0.82rem; font-weight: 600; margin-bottom: 4px; }
+  .task-card .t-meta { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tag {
+    font-size: 0.65rem; font-family: 'Space Mono', monospace;
+    padding: 2px 7px; border-radius: 3px;
+  }
+  .tag-effort { background: rgba(124,106,247,0.15); color: var(--accent3); }
+  .tag-impact { background: rgba(255,71,87,0.12); color: var(--red); }
+  .tag-team { background: rgba(232,255,71,0.12); color: var(--accent); }
+
+  /* NOTE BOX */
+  .note-box {
+    background: rgba(232,255,71,0.05);
+    border: 1px solid rgba(232,255,71,0.2);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    margin-bottom: 24px;
+    font-size: 0.82rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .note-box strong { color: var(--accent); }
+
+  /* BTN */
+  .btn {
+    padding: 10px 22px; border-radius: 6px; border: none; cursor: pointer;
+    font-family: 'Syne', sans-serif; font-size: 0.85rem; font-weight: 700;
+    transition: all 0.15s;
+  }
+  .btn-primary { background: var(--accent); color: #0a0a0f; }
+  .btn-primary:hover { background: #d4eb30; }
+  .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+  .btn-ghost:hover { color: var(--text); border-color: var(--muted); }
+
+  .actions-row { display: flex; gap: 10px; margin-top: 24px; flex-wrap: wrap; }
+
+  /* SECTION TITLE */
+  .section-title {
+    font-size: 0.7rem; font-family: 'Space Mono', monospace;
+    color: var(--muted); text-transform: uppercase; letter-spacing: 2px;
+    margin-bottom: 16px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  /* WHEEL / RADAR */
+  .radar-wrap { display: flex; justify-content: center; margin-bottom: 24px; }
+  canvas { border-radius: var(--radius); }
+
+  /* ANIM */
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+  .panel.active { animation: fadeIn 0.3s ease; }
+
+  .total-bar-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 24px;
+  }
+  .total-bar-label { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.82rem; }
+  .total-bar-bg { height: 14px; background: var(--border); border-radius: 7px; overflow: hidden; }
+  .total-bar-fill { height: 100%; border-radius: 7px; transition: width 0.8s ease; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="header-inner">
+      <div class="brand">
+        <div class="brand-icon">🔬</div>
+        <div>
+          <h1>Tech Debt Analyzer</h1>
+          <p>// análise de dívida técnica — v1.0</p>
+        </div>
+      </div>
+      <div class="score-badge">
+        <div class="label">Score Global</div>
+        <div class="value" id="globalScore">—</div>
+        <div class="sub" id="globalLabel">preencha o checklist</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('checklist')">📋 Checklist</button>
+    <button class="tab" onclick="switchTab('dashboard')">📊 Dashboard</button>
+    <button class="tab" onclick="switchTab('roadmap')">🗺️ Roadmap</button>
+  </div>
+
+  <!-- CHECKLIST PANEL -->
+  <div class="panel active" id="panel-checklist">
+    <div class="note-box">
+      <strong>Como usar:</strong> Marque os itens que já estão <strong>resolvidos</strong> no seu projeto. O score é calculado automaticamente — quanto mais itens marcados, menor a dívida técnica. Itens não marcados aparecem no Roadmap de remediação.
+    </div>
+    <p class="section-title">Categorias de Avaliação</p>
+    <div class="category-grid" id="categoryGrid"></div>
+    <div class="actions-row">
+      <button class="btn btn-primary" onclick="switchTab('dashboard')">Ver Dashboard →</button>
+      <button class="btn btn-ghost" onclick="resetAll()">↺ Resetar tudo</button>
+    </div>
+  </div>
+
+  <!-- DASHBOARD PANEL -->
+  <div class="panel" id="panel-dashboard">
+    <p class="section-title">Visão Geral do Projeto</p>
+    <div class="total-bar-wrap">
+      <div class="total-bar-label">
+        <span>Saúde técnica geral</span>
+        <span id="healthPct">0%</span>
+      </div>
+      <div class="total-bar-bg">
+        <div class="total-bar-fill" id="healthBar" style="width:0%"></div>
+      </div>
+    </div>
+    <div class="radar-wrap">
+      <canvas id="radarCanvas" width="480" height="340"></canvas>
+    </div>
+    <p class="section-title">Por Categoria</p>
+    <div class="progress-section">
+      <div id="categoryProgress"></div>
+    </div>
+    <div class="dashboard-grid" id="metricsGrid"></div>
+    <div class="actions-row">
+      <button class="btn btn-primary" onclick="switchTab('roadmap')">Ver Roadmap →</button>
+      <button class="btn btn-ghost" onclick="switchTab('checklist')">← Voltar ao Checklist</button>
+    </div>
+  </div>
+
+  <!-- ROADMAP PANEL -->
+  <div class="panel" id="panel-roadmap">
+    <div class="note-box">
+      <strong>Roadmap gerado automaticamente</strong> com base nos itens não resolvidos. Prioridade calculada por impacto × esforço.
+    </div>
+    <p class="section-title">Plano de Remediação</p>
+    <div class="roadmap-lanes">
+      <div class="lane">
+        <div class="lane-header urgent">🔥 Urgente (0–30 dias)</div>
+        <div class="lane-body" id="lane-urgent"></div>
+      </div>
+      <div class="lane">
+        <div class="lane-header short">⚡ Curto Prazo (1–3 meses)</div>
+        <div class="lane-body" id="lane-short"></div>
+      </div>
+      <div class="lane">
+        <div class="lane-header long">🔭 Longo Prazo (3–6 meses)</div>
+        <div class="lane-body" id="lane-long"></div>
+      </div>
+    </div>
+    <div class="actions-row">
+      <button class="btn btn-ghost" onclick="switchTab('dashboard')">← Voltar ao Dashboard</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const CATEGORIES = [
+  {
+    id: 'architecture',
+    icon: '🏗️',
+    title: 'Arquitetura & Design',
+    items: [
+      { id: 'a1', label: 'Separação clara de responsabilidades (SRP/SOLID)', impact: 'high', effort: 'Alto', horizon: 'long', team: 'Tech Lead' },
+      { id: 'a2', label: 'Ausência de dependências circulares entre módulos', impact: 'high', effort: 'Médio', horizon: 'short', team: 'Dev' },
+      { id: 'a3', label: 'Arquitetura documentada (ADRs ou diagramas)', impact: 'med', effort: 'Baixo', horizon: 'urgent', team: 'Tech Lead' },
+      { id: 'a4', label: 'Padrões de design aplicados consistentemente', impact: 'med', effort: 'Alto', horizon: 'long', team: 'Dev' },
+      { id: 'a5', label: 'Ausência de God Classes / Modules', impact: 'high', effort: 'Alto', horizon: 'long', team: 'Dev' },
+      { id: 'a6', label: 'Camadas de abstração bem definidas (API, Service, Data)', impact: 'high', effort: 'Médio', horizon: 'short', team: 'Tech Lead' },
+    ]
+  },
+  {
+    id: 'code',
+    icon: '💻',
+    title: 'Qualidade de Código',
+    items: [
+      { id: 'c1', label: 'Cobertura de testes > 70% (unit + integration)', impact: 'high', effort: 'Alto', horizon: 'short', team: 'Dev' },
+      { id: 'c2', label: 'Linter e formatter configurados no CI', impact: 'low', effort: 'Baixo', horizon: 'urgent', team: 'Dev' },
+      { id: 'c3', label: 'Ausência de código morto / comentado extenso', impact: 'med', effort: 'Baixo', horizon: 'urgent', team: 'Dev' },
+      { id: 'c4', label: 'Funções com responsabilidade única e < 40 linhas', impact: 'med', effort: 'Médio', horizon: 'short', team: 'Dev' },
+      { id: 'c5', label: 'Nomenclatura consistente e semântica', impact: 'med', effort: 'Baixo', horizon: 'urgent', team: 'Dev' },
+      { id: 'c6', label: 'Zero warnings em produção no console/logs', impact: 'high', effort: 'Médio', horizon: 'urgent', team: 'Dev' },
+    ]
+  },
+  {
+    id: 'infra',
+    icon: '⚙️',
+    title: 'Infraestrutura & DevOps',
+    items: [
+      { id: 'i1', label: 'Pipeline CI/CD automatizado e estável', impact: 'high', effort: 'Médio', horizon: 'urgent', team: 'DevOps' },
+      { id: 'i2', label: 'Ambientes (dev/staging/prod) isolados e consistentes', impact: 'high', effort: 'Médio', horizon: 'short', team: 'DevOps' },
+      { id: 'i3', label: 'Infraestrutura como código (Terraform, Pulumi…)', impact: 'med', effort: 'Alto', horizon: 'long', team: 'DevOps' },
+      { id: 'i4', label: 'Rollback automatizado em caso de falha', impact: 'high', effort: 'Médio', horizon: 'short', team: 'DevOps' },
+      { id: 'i5', label: 'Monitoramento e alertas configurados (APM/logs)', impact: 'high', effort: 'Médio', horizon: 'urgent', team: 'DevOps' },
+    ]
+  },
+  {
+    id: 'deps',
+    icon: '📦',
+    title: 'Dependências & Segurança',
+    items: [
+      { id: 'd1', label: 'Dependências atualizadas (< 2 major versions atrás)', impact: 'high', effort: 'Médio', horizon: 'short', team: 'Dev' },
+      { id: 'd2', label: 'Sem vulnerabilidades críticas (npm audit / snyk)', impact: 'high', effort: 'Baixo', horizon: 'urgent', team: 'Dev' },
+      { id: 'd3', label: 'Gerenciamento de secrets seguro (vault/env)', impact: 'high', effort: 'Baixo', horizon: 'urgent', team: 'DevOps' },
+      { id: 'd4', label: 'Lock files commitados e atualizados', impact: 'med', effort: 'Baixo', horizon: 'urgent', team: 'Dev' },
+      { id: 'd5', label: 'Licenças de dependências verificadas', impact: 'low', effort: 'Baixo', horizon: 'long', team: 'Tech Lead' },
+    ]
+  },
+  {
+    id: 'docs',
+    icon: '📝',
+    title: 'Documentação',
+    items: [
+      { id: 'doc1', label: 'README atualizado com setup local funcional', impact: 'high', effort: 'Baixo', horizon: 'urgent', team: 'Dev' },
+      { id: 'doc2', label: 'APIs documentadas (Swagger/OpenAPI)', impact: 'high', effort: 'Médio', horizon: 'short', team: 'Dev' },
+      { id: 'doc3', label: 'Decisões técnicas registradas (ADRs)', impact: 'med', effort: 'Baixo', horizon: 'short', team: 'Tech Lead' },
+      { id: 'doc4', label: 'Runbooks de operação e incidente', impact: 'high', effort: 'Médio', horizon: 'short', team: 'DevOps' },
+      { id: 'doc5', label: 'Onboarding doc para novos devs', impact: 'med', effort: 'Baixo', horizon: 'short', team: 'Tech Lead' },
+    ]
+  },
+  {
+    id: 'process',
+    icon: '🔄',
+    title: 'Processo & Time',
+    items: [
+      { id: 'p1', label: 'Code review obrigatório com critérios claros', impact: 'high', effort: 'Baixo', horizon: 'urgent', team: 'Tech Lead' },
+      { id: 'p2', label: 'Definition of Done definida e respeitada', impact: 'high', effort: 'Baixo', horizon: 'urgent', team: 'Tech Lead' },
+      { id: 'p3', label: 'Tech debt backlog visível e priorizado', impact: 'med', effort: 'Baixo', horizon: 'urgent', team: 'Tech Lead' },
+      { id: 'p4', label: 'Retrospectivas técnicas regulares', impact: 'med', effort: 'Baixo', horizon: 'short', team: 'Tech Lead' },
+      { id: 'p5', label: 'Bus factor > 1 para componentes críticos', impact: 'high', effort: 'Alto', horizon: 'long', team: 'Tech Lead' },
+    ]
+  },
+];
+
+const IMPACT_ORDER = { high: 3, med: 2, low: 1 };
+const IMPACT_LABEL = { high: 'Alto impacto', med: 'Médio impacto', low: 'Baixo impacto' };
+const IMPACT_CLASS = { high: 'impact-high', med: 'impact-med', low: 'impact-low' };
+
+let checked = {};
+
+function getPillClass(pct) {
+  if (pct >= 75) return 'pill-green';
+  if (pct >= 50) return 'pill-yellow';
+  if (pct >= 25) return 'pill-orange';
+  return 'pill-red';
+}
+
+function getScoreClass(pct) {
+  if (pct >= 75) return 'low';
+  if (pct >= 50) return 'medium';
+  if (pct >= 25) return 'high';
+  return 'critical';
+}
+
+function getBarColor(pct) {
+  if (pct >= 75) return 'var(--green)';
+  if (pct >= 50) return 'var(--yellow)';
+  if (pct >= 25) return 'var(--accent2)';
+  return 'var(--red)';
+}
+
+function getCatScore(cat) {
+  const total = cat.items.length;
+  const done = cat.items.filter(i => checked[i.id]).length;
+  return Math.round((done / total) * 100);
+}
+
+function getGlobalScore() {
+  const allItems = CATEGORIES.flatMap(c => c.items);
+  const done = allItems.filter(i => checked[i.id]).length;
+  return Math.round((done / allItems.length) * 100);
+}
+
+function renderChecklist() {
+  const grid = document.getElementById('categoryGrid');
+  grid.innerHTML = '';
+  CATEGORIES.forEach(cat => {
+    const pct = getCatScore(cat);
+    const pill = getPillClass(pct);
+    const card = document.createElement('div');
+    card.className = 'cat-card';
+    card.innerHTML = `
+      <div class="cat-header">
+        <span class="cat-icon">${cat.icon}</span>
+        <span class="cat-title">${cat.title}</span>
+        <span class="cat-score-pill ${pill}">${pct}%</span>
+      </div>
+      <div class="check-list">
+        ${cat.items.map(item => `
+          <div class="check-item ${checked[item.id] ? 'checked' : ''}" onclick="toggleItem('${item.id}')">
+            <div class="checkbox"></div>
+            <div class="item-content">
+              <div class="item-label">${item.label}</div>
+              <div class="item-impact ${IMPACT_CLASS[item.impact]}">${IMPACT_LABEL[item.impact]}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+function renderDashboard() {
+  const globalPct = getGlobalScore();
+  const pctEl = document.getElementById('healthPct');
+  const barEl = document.getElementById('healthBar');
+  pctEl.textContent = globalPct + '%';
+  barEl.style.width = globalPct + '%';
+  barEl.style.background = getBarColor(globalPct);
+
+  // Score badge
+  const scoreEl = document.getElementById('globalScore');
+  const labelEl = document.getElementById('globalLabel');
+  scoreEl.textContent = globalPct + '%';
+  scoreEl.className = 'value ' + getScoreClass(globalPct);
+  const labels = { critical: 'crítico — ação imediata', high: 'alto risco', medium: 'atenção necessária', low: 'boa saúde' };
+  labelEl.textContent = labels[getScoreClass(globalPct)];
+
+  // Category progress
+  const progDiv = document.getElementById('categoryProgress');
+  progDiv.innerHTML = CATEGORIES.map(cat => {
+    const pct = getCatScore(cat);
+    return `
+      <div class="prog-row">
+        <div class="prog-label">${cat.icon} ${cat.title}</div>
+        <div class="prog-bar"><div class="prog-fill" style="width:${pct}%;background:${getBarColor(pct)}"></div></div>
+        <div class="prog-val">${pct}%</div>
+      </div>
+    `;
+  }).join('');
+
+  // Metrics
+  const allItems = CATEGORIES.flatMap(c => c.items);
+  const done = allItems.filter(i => checked[i.id]).length;
+  const pending = allItems.length - done;
+  const criticalPending = allItems.filter(i => !checked[i.id] && i.impact === 'high').length;
+  const metricsGrid = document.getElementById('metricsGrid');
+  metricsGrid.innerHTML = `
+    <div class="metric-card">
+      <div class="m-label">Itens Resolvidos</div>
+      <div class="m-value" style="color:var(--green)">${done}<span style="font-size:1rem;color:var(--muted)">/${allItems.length}</span></div>
+      <div class="m-bar"><div class="m-fill" style="width:${Math.round(done/allItems.length*100)}%;background:var(--green)"></div></div>
+    </div>
+    <div class="metric-card">
+      <div class="m-label">Pendentes</div>
+      <div class="m-value" style="color:var(--yellow)">${pending}</div>
+      <div class="m-bar"><div class="m-fill" style="width:${Math.round(pending/allItems.length*100)}%;background:var(--yellow)"></div></div>
+    </div>
+    <div class="metric-card">
+      <div class="m-label">Alto Impacto Pendentes</div>
+      <div class="m-value" style="color:var(--red)">${criticalPending}</div>
+      <div class="m-bar"><div class="m-fill" style="width:${Math.round(criticalPending/allItems.length*100)}%;background:var(--red)"></div></div>
+    </div>
+    <div class="metric-card">
+      <div class="m-label">Categorias Saudáveis (≥75%)</div>
+      <div class="m-value" style="color:var(--accent3)">${CATEGORIES.filter(c => getCatScore(c) >= 75).length}<span style="font-size:1rem;color:var(--muted)">/${CATEGORIES.length}</span></div>
+      <div class="m-bar"><div class="m-fill" style="width:${Math.round(CATEGORIES.filter(c=>getCatScore(c)>=75).length/CATEGORIES.length*100)}%;background:var(--accent3)"></div></div>
+    </div>
+  `;
+
+  drawRadar();
+}
+
+function drawRadar() {
+  const canvas = document.getElementById('radarCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const cx = W / 2, cy = H / 2 + 10;
+  const R = Math.min(W, H) / 2 - 50;
+  const n = CATEGORIES.length;
+  const scores = CATEGORIES.map(c => getCatScore(c) / 100);
+  const labels = CATEGORIES.map(c => c.icon + ' ' + c.title.split(' ')[0]);
+  const angle0 = -Math.PI / 2;
+
+  // Grid
+  for (let r = 1; r <= 4; r++) {
+    ctx.beginPath();
+    for (let i = 0; i <= n; i++) {
+      const a = angle0 + (i / n) * 2 * Math.PI;
+      const x = cx + (R * r / 4) * Math.cos(a);
+      const y = cy + (R * r / 4) * Math.sin(a);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.strokeStyle = 'rgba(42,42,58,0.8)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // Axes
+  for (let i = 0; i < n; i++) {
+    const a = angle0 + (i / n) * 2 * Math.PI;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + R * Math.cos(a), cy + R * Math.sin(a));
+    ctx.strokeStyle = 'rgba(42,42,58,0.6)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // Data polygon
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) {
+    const a = angle0 + (i / n) * 2 * Math.PI;
+    const x = cx + R * scores[i] * Math.cos(a);
+    const y = cy + R * scores[i] * Math.sin(a);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(232,255,71,0.12)';
+  ctx.fill();
+  ctx.strokeStyle = '#e8ff47';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Dots
+  for (let i = 0; i < n; i++) {
+    const a = angle0 + (i / n) * 2 * Math.PI;
+    const x = cx + R * scores[i] * Math.cos(a);
+    const y = cy + R * scores[i] * Math.sin(a);
+    ctx.beginPath();
+    ctx.arc(x, y, 5, 0, 2 * Math.PI);
+    ctx.fillStyle = '#e8ff47';
+    ctx.fill();
+  }
+
+  // Labels
+  ctx.font = '600 12px Syne, sans-serif';
+  ctx.fillStyle = '#6b6b80';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (let i = 0; i < n; i++) {
+    const a = angle0 + (i / n) * 2 * Math.PI;
+    const lx = cx + (R + 34) * Math.cos(a);
+    const ly = cy + (R + 28) * Math.sin(a);
+    ctx.fillText(labels[i], lx, ly);
+  }
+}
+
+function renderRoadmap() {
+  const allItems = CATEGORIES.flatMap(c => c.items.filter(i => !checked[i.id]).map(i => ({ ...i, catTitle: c.title, catIcon: c.icon })));
+  const byHorizon = { urgent: [], short: [], long: [] };
+  allItems
+    .sort((a, b) => IMPACT_ORDER[b.impact] - IMPACT_ORDER[a.impact])
+    .forEach(item => byHorizon[item.horizon].push(item));
+
+  ['urgent', 'short', 'long'].forEach(h => {
+    const lane = document.getElementById('lane-' + h);
+    if (byHorizon[h].length === 0) {
+      lane.innerHTML = '<div style="color:var(--muted);font-size:0.8rem;text-align:center;padding:20px 0">✅ Nenhum item pendente</div>';
+    } else {
+      lane.innerHTML = byHorizon[h].map(item => `
+        <div class="task-card">
+          <div class="t-title">${item.label}</div>
+          <div class="t-meta">
+            <span class="tag tag-impact">${IMPACT_LABEL[item.impact]}</span>
+            <span class="tag tag-effort">esforço: ${item.effort}</span>
+            <span class="tag tag-team">${item.team}</span>
+          </div>
+        </div>
+      `).join('');
+    }
+  });
+}
+
+function toggleItem(id) {
+  checked[id] = !checked[id];
+  renderChecklist();
+  updateGlobalBadge();
+}
+
+function updateGlobalBadge() {
+  const pct = getGlobalScore();
+  const scoreEl = document.getElementById('globalScore');
+  const labelEl = document.getElementById('globalLabel');
+  if (Object.keys(checked).filter(k => checked[k]).length === 0) {
+    scoreEl.textContent = '—';
+    scoreEl.className = 'value';
+    labelEl.textContent = 'preencha o checklist';
+  } else {
+    scoreEl.textContent = pct + '%';
+    scoreEl.className = 'value ' + getScoreClass(pct);
+    const labels = { critical: 'crítico — ação imediata', high: 'alto risco', medium: 'atenção necessária', low: 'boa saúde' };
+    labelEl.textContent = labels[getScoreClass(pct)];
+  }
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    const names = ['checklist', 'dashboard', 'roadmap'];
+    t.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  if (name === 'dashboard') renderDashboard();
+  if (name === 'roadmap') renderRoadmap();
+}
+
+function resetAll() {
+  checked = {};
+  renderChecklist();
+  updateGlobalBadge();
+}
+
+// Init
+renderChecklist();
+</script>
+</body>
+</html>
